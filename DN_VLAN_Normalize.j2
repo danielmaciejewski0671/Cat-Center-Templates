@@ -1,0 +1,25 @@
+{#- =====================================================================
+  DN_VLAN_Normalize | Day N / brownfield | Jinja2
+  Target  : Catalyst 9000 (VTP transparent or off)
+  Purpose : Make sure the standard VLANs exist with the standard names.
+            Safe to run more than once: it creates or renames VLANs.
+            It removes a VLAN only if you list it in retire_vlans.
+
+  Variables:
+    vlan_map          string   required   id:name pairs, comma separated
+                                          e.g. 10:DATA,20:VOICE,30:IOT,99:MGMT
+    retire_vlans      string   optional   comma separated VLAN IDs to delete
+                                          e.g. 666,777  (check that no ports use them first)
+===================================================================== -#}
+{%- for pair in vlan_map.split(',') %}
+{%- set parts = pair.split(':') %}
+vlan {{ parts[0] | trim }}
+ name {{ parts[1] | trim | upper }}
+!
+{%- endfor %}
+{%- if retire_vlans %}
+{%- for v in retire_vlans.split(',') %}
+no vlan {{ v | trim }}
+{%- endfor %}
+!
+{%- endif %}

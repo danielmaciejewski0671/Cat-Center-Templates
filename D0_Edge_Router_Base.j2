@@ -1,0 +1,52 @@
+{#- =====================================================================
+  D0_Edge_Router_Base | Day 0 / PnP onboarding | Jinja2
+  Target  : ISR 1000/4000, Catalyst 8200/8300 (IOS-XE, autonomous mode)
+  Purpose : WAN reachability plus a loopback that Catalyst Center can
+            use as the stable management address.
+
+  Variables:
+    hostname          string   required
+    wan_interface     string   required   e.g. GigabitEthernet0/0/0
+    wan_mode          string   required   "dhcp" or "static"
+    wan_ip            string   if static
+    wan_mask          string   if static
+    wan_gateway       string   if static
+    lan_interface     string   optional   e.g. GigabitEthernet0/0/1
+    lan_ip            string   optional
+    lan_mask          string   optional
+    loopback_ip       string   required   /32 mgmt loopback
+    domain_name       string   optional
+===================================================================== -#}
+hostname {{ hostname }}
+!
+{%- if domain_name %}
+ip domain name {{ domain_name }}
+{%- endif %}
+!
+interface Loopback0
+ description MGMT
+ ip address {{ loopback_ip }} 255.255.255.255
+!
+interface {{ wan_interface }}
+ description WAN
+{%- if wan_mode | lower == 'static' %}
+ ip address {{ wan_ip }} {{ wan_mask }}
+{%- else %}
+ ip address dhcp
+{%- endif %}
+ no shutdown
+!
+{%- if lan_interface and lan_ip %}
+interface {{ lan_interface }}
+ description LAN
+ ip address {{ lan_ip }} {{ lan_mask }}
+ no shutdown
+!
+{%- endif %}
+{%- if wan_mode | lower == 'static' %}
+ip route 0.0.0.0 0.0.0.0 {{ wan_gateway }}
+{%- endif %}
+!
+ip ssh version 2
+ip ssh source-interface Loopback0
+!

@@ -1,0 +1,43 @@
+{#- =====================================================================
+  DN_Access_Port_Standardize | Day N / brownfield | Jinja2
+  Target  : Catalyst 9000 access switches already in inventory
+  Purpose : Apply a standard edge-port security posture to every
+            physical access port WITHOUT changing access/voice VLAN
+            assignments. Existing VLAN mapping, dot1x and descriptions
+            are left alone.
+
+  Uses the __interface system variable (the device's interface list from
+  inventory). Trunks and non-physical interfaces are skipped automatically.
+  Ports whose description contains any skip keyword are also skipped.
+  Check these field names against your release in Template Hub's
+  simulation first.
+
+  Variables:
+    skip_keywords     string   optional   comma separated, case-insensitive
+                                          default UPLINK,TRUNK,AP,WAP,DO-NOT-TOUCH
+    storm_level       string   optional   default 5.00 (broadcast %)
+    enable_errdisable boolean  optional   default true (bpduguard auto-recovery)
+===================================================================== -#}
+{%- set skip_list = (skip_keywords | default('UPLINK,TRUNK,AP,WAP,DO-NOT-TOUCH', true)).upper().split(',') %}
+{%- for intf in __interface %}
+{%- if intf.portMode == 'access' and intf.interfaceType == 'Physical' %}
+{%- set desc = (intf.description or '') | upper %}
+{%- set hits = [] %}
+{%- for k in skip_list %}{% if k | trim and k | trim in desc %}{% set _ = hits.append(k) %}{% endif %}{% endfor %}
+{%- if hits | length == 0 %}
+interface {{ intf.portName }}
+ switchport mode access
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ storm-control broadcast level {{ storm_level | default('5.00', true) }}
+ storm-control action trap
+!
+{%- endif %}
+{%- endif %}
+{%- endfor %}
+{%- if enable_errdisable | default('true', true) | string | lower == 'true' %}
+errdisable recovery cause bpduguard
+errdisable recovery interval 300
+{%- endif %}
+!

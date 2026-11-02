@@ -1,0 +1,70 @@
+{#- =====================================================================
+  DN_Mgmt_Hardening_Cleanup | Day N / brownfield | Jinja2
+  Target  : IOS-XE switches and routers already in inventory
+  Purpose : Apply a management-plane baseline and remove known legacy
+            items (old SNMP communities, old local accounts) that you
+            name explicitly. A template cannot read the running config,
+            so legacy items have to be listed. It will not find them.
+
+  !! PRE-CHECKS before provisioning !!
+   - Confirm the CLI credential Catalyst Center uses for this device
+     is SSH, not Telnet. If ssh_only = true and the device is managed
+     over Telnet, you will lock Catalyst Center out.
+   - Do NOT put the account Catalyst Center logs in with into
+     legacy_users.
+   - Leave ip http(s) server alone if anything uses it (PnP, some
+     Assurance/telemetry paths, web UI). That's why it's a toggle.
+
+  Variables:
+    ssh_only          boolean  optional   default true  (vty transport input ssh)
+    exec_timeout      integer  optional   default 10 (minutes)
+    vty_acl           string   optional   name of an existing ACL to apply on vty
+    banner_text       string   optional   login banner text (no ^ characters)
+    legacy_snmp       string   optional   comma separated community strings to remove
+    legacy_users      string   optional   comma separated local usernames to remove
+    disable_http      boolean  optional   default false
+===================================================================== -#}
+service password-encryption
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps log datetime msec localtime show-timezone
+no ip source-route
+no service pad
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 5 within 60
+login on-failure log
+!
+{%- if disable_http | default('false', true) | string | lower == 'true' %}
+no ip http server
+no ip http secure-server
+!
+{%- endif %}
+line vty 0 15
+ exec-timeout {{ exec_timeout | default(10, true) }} 0
+{%- if ssh_only | default('true', true) | string | lower == 'true' %}
+ transport input ssh
+{%- endif %}
+{%- if vty_acl %}
+ access-class {{ vty_acl }} in vrf-also
+{%- endif %}
+!
+{%- if banner_text %}
+banner login ^
+{{ banner_text }}
+^
+!
+{%- endif %}
+{%- if legacy_snmp %}
+{%- for c in legacy_snmp.split(',') %}
+no snmp-server community {{ c | trim }}
+{%- endfor %}
+!
+{%- endif %}
+{%- if legacy_users %}
+{%- for u in legacy_users.split(',') %}
+no username {{ u | trim }}
+{%- endfor %}
+!
+{%- endif %}
